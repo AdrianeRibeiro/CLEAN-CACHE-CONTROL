@@ -1,5 +1,5 @@
 import { LocalLoadPurchases } from '@/data/usercases'
-import { mockPurchases, CacheStoreSpy } from '@/data/tests'
+import { mockPurchases, CacheStoreSpy, getCacheExpirationDate } from '@/data/tests'
 
 type SutTypes = {
     sut: LocalLoadPurchases
@@ -22,10 +22,69 @@ describe('LocalSavePurchases', () => {
         expect(cacheStore.actions).toEqual([])
     })
 
-    test('não chamar a chave correta no load', () => {
+    test('deve retornar uma lista vazia se o load falhar', async () => {
         const { cacheStore, sut } = makeSut()
-        sut.loadAll()
+        cacheStore.simulateFetchError()
+        const purchases = await sut.loadAll()
+        expect(cacheStore.actions).toEqual([CacheStoreSpy.Action.fetch])
+        expect(purchases).toEqual([])
+    })
+
+    test('deve retornar uma lista de compras se o cache é válido', async () => {
+        const currentDate = new Date()
+        const timestamp = getCacheExpirationDate(currentDate)
+        timestamp.setSeconds(timestamp.getSeconds() + 1)
+        const { cacheStore, sut } = makeSut(timestamp)
+        cacheStore.fetchResult = {
+            timestamp,
+            value: mockPurchases()
+        }
+        const purchases = await sut.loadAll()
         expect(cacheStore.actions).toEqual([CacheStoreSpy.Action.fetch])
         expect(cacheStore.fetchKey).toBe('purchases')
+        expect(purchases).toEqual(cacheStore.fetchResult.value)
+    })
+
+    test('deve retornar uma lista vazia se o cache está expirado', async () => {
+        const currentDate = new Date()
+        const timestamp = getCacheExpirationDate(currentDate)
+        timestamp.setSeconds(timestamp.getSeconds() - 1)
+        const { cacheStore, sut } = makeSut(currentDate)
+        cacheStore.fetchResult = {
+            timestamp,
+            value: mockPurchases()
+        }
+        const purchases = await sut.loadAll()
+        expect(cacheStore.actions).toEqual([CacheStoreSpy.Action.fetch])
+        expect(cacheStore.fetchKey).toBe('purchases')
+        expect(purchases).toEqual([])
+    })
+
+    test('deve retornar uma lista vazia se o cache está na data de expiração', async () => {
+        const currentDate = new Date()
+        const timestamp = getCacheExpirationDate(currentDate)
+        const { cacheStore, sut } = makeSut(currentDate)
+        cacheStore.fetchResult = {
+            timestamp,
+            value: mockPurchases()
+        }
+        const purchases = await sut.loadAll()
+        expect(cacheStore.actions).toEqual([CacheStoreSpy.Action.fetch])
+        expect(cacheStore.fetchKey).toBe('purchases')
+        expect(purchases).toEqual([])
+    })
+
+    test('deve retornar uma lista vazia se o cache for vazio', async () => {
+        const currentDate = new Date()
+        const timestamp = getCacheExpirationDate(currentDate)
+        const { cacheStore, sut } = makeSut(timestamp)
+        cacheStore.fetchResult = {
+            timestamp,
+            value: []
+        }
+        const purchases = await sut.loadAll()
+        expect(cacheStore.actions).toEqual([CacheStoreSpy.Action.fetch])
+        expect(cacheStore.fetchKey).toBe('purchases')
+        expect(purchases).toEqual([])
     })
 })
